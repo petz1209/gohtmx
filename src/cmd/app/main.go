@@ -8,6 +8,9 @@ import (
 	"net/http"
 
 	"bikes/internal/database"
+	"bikes/internal/features/riders"
+	"bikes/internal/htmx"
+	"bikes/internal/ui"
 )
 
 //go:embed static
@@ -30,6 +33,14 @@ func main() {
 
 	// wire up your routing.
 	// probably think of an html renderer
+
+	renderer := htmx.NewRenderer(ui.UiFS)
+
+	h := handlers{
+		Rider: riders.NewRiderHandler(renderer, db),
+	}
+
+	wireRoutes(mux, &h)
 
 	svr := &http.Server{
 		Addr:    "localhost:8080",
