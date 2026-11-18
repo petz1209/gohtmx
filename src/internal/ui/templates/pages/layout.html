@@ -4,10 +4,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>{{.Title}}</title>
+     {{block "head" .}}{{end}}
+
+     <!--Here we register custom scripts that are relevant for the given page.
+         These guys should somehow becomme part of the static stuff.
+         No clue how I can achieve this.
+     -->
+     {{block "scripts" .}}{{end}}
 </head>
 <body>
-    {{template "content" .}}
+
+    <!--add a navbar. that navbar can get some information that is relevant for it.-->
+    <header>{{template "navbar" .}}</header>
+    <main>
+        <!--here we add the actuall content-->
+        {{template "content" .}}
+    </main>
+
+    <!--if the page needs some custom javascript-->
+    
 </body>
 </html>
 {{end }}

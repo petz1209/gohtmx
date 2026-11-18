@@ -1,20 +1,15 @@
 package main
 
 import (
-	"embed"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 
 	"bikes/internal/database"
-	"bikes/internal/features/riders"
-	"bikes/internal/htmx"
+	"bikes/internal/features/home"
 	"bikes/internal/ui"
 )
-
-//go:embed static
-var staticFS embed.FS
 
 func main() {
 	dbPath := flag.String("db", "db.sql", "path to the SQLite database file")
@@ -29,18 +24,16 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
+	scriptRegistry := ui.NewRegistry(ui.UiFS)
+	if err := home.NewHomeRouter(mux, ui.UiFS, scriptRegistry); err != nil {
 
-	// wire up your routing.
-	// probably think of an html renderer
-
-	renderer := htmx.NewRenderer(ui.UiFS)
-
-	h := handlers{
-		Rider: riders.NewRiderHandler(renderer, db),
+		log.Fatal(err)
 	}
 
-	wireRoutes(mux, &h)
+	fileServer := scriptRegistry.Handler()
+
+	//mux.Handle("/static/", http.FileServer(http.FS(ui.StaticFS)))
+	mux.Handle("/static/", fileServer)
 
 	svr := &http.Server{
 		Addr:    "localhost:8080",
