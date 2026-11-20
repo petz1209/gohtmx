@@ -1,64 +1,72 @@
 package riders
 
 import (
-	"bikes/internal/features/riders/domain"
-	"bikes/internal/features/riders/repository"
-	"bikes/internal/htmx"
-	"database/sql"
-	"embed"
-	"log"
+	"bikes/internal/ui"
+	"fmt"
 	"net/http"
+	"strconv"
 )
 
-//go:embed templates
-var fs embed.FS
+type handler struct {
 
-type RiderHandler struct {
-	srv      *Service
-	renderer *htmx.Renderer
+	// renderer für die OverviewPage
+	overviewpage *ui.Page
+	// renderer für die DetailPage
+	detailpage *ui.Page
+	srv        *service
 }
 
-func NewRiderHandler(
-	renderer *htmx.Renderer,
-	db *sql.DB) *RiderHandler {
+func newHandler(overviewpage, detailpage *ui.Page, srv *service) *handler {
 
-	repo := repository.NewRiderRepository(db)
-	service := NewService(repo)
+	return &handler{overviewpage: overviewpage,
+		detailpage: detailpage,
+		srv:        srv}
 
-	// register at the renderer
-	if err := renderer.Register("rider", fs, "templates/*.html"); err != nil {
-		log.Fatal(err)
-	}
-	if err := renderer.Register("rider.details", fs, "templates/details/*.html"); err != nil {
-		log.Fatal(err)
-	}
-
-	return &RiderHandler{srv: service, renderer: renderer}
 }
 
-func (h *RiderHandler) Index(w http.ResponseWriter, r *http.Request) {
+func (h *handler) OverviewPage(w http.ResponseWriter, r *http.Request) {
 
-	data, err := h.srv.GetRiders(r.Context())
+	riders, err := h.srv.GetAllRiders(r.Context())
 	if err != nil {
-		http.Error(w, "internal server error", 500)
+		fmt.Printf("error: %v\n", err)
+		e := h.overviewpage.RenderErrorPage(w, r, ui.PageError{
+			Error: err.Error(), StatusCode: 500})
+		if e != nil {
+			fmt.Printf("Error Rendering: %v\n", e)
+		}
 		return
 	}
 
-	p := htmx.Page{Title: "Riders", Data: data}
-	h.renderer.Render(r.Context(), "rider", p, w, r)
+	if riders == nil {
+		e := h.overviewpage.RenderErrorPage(w, r, ui.PageError{
+			Error: "No Riders found"})
+		if e != nil {
+			fmt.Printf("Error Rendering: %v\n", e)
+		}
+		return
+
+	}
+	e := h.overviewpage.Render(w, r, ui.PageData{Data: riders})
+	if e != nil {
+		fmt.Printf("Error Rendering: %v\n", e)
+	}
 	return
 }
 
-func (h *RiderHandler) PagesDetail(w http.ResponseWriter, r *http.Request) {
-	const setname = "rider.details"
+func (h *handler) DetailPage(w http.ResponseWriter, r *http.Request) {
 
-	p := htmx.Page{Title: "Riders", Data: domain.RiderDetails{}}
-	h.renderer.Render(r.Context(), setname, p, w, r)
-	return
-}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		h.detailpage.RenderErrorPage(w, r, ui.PageError{StatusCode: 400, Error: "invalid id"})
+		return
+	}
 
-func (h *RiderHandler) Error(w http.ResponseWriter, r *http.Request) {
+	rider, err := h.srv.repo.GetRiderDetails(r.Context(), id)
+	if err != nil {
+		h.detailpage.RenderErrorPage(w, r, ui.PageError{StatusCode: 404, Error: fmt.Sprintf("Rider not found for id: %d with error:%v", id, err)})
+		return
+	}
 
-	h.renderer.Error(r.Context(), 500, "An Error Occured", w, r)
+	h.detailpage.Render(w, r, ui.PageData{Data: rider, Title: fmt.Sprintf("%s %s", rider.FirstName, rider.LastName)})
 	return
 }

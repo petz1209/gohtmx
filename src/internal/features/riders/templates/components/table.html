@@ -1,0 +1,39 @@
+{{define "table"}}
+
+
+{{with .Data}}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>NickName</th>
+            <th>Name</th>
+            <th>Nationality</th>
+            <th>Birthday</th>
+            <th>Team</th>
+        </tr>
+    </thead>
+    <tbody>
+        
+        {{ range $idx, $item := .}}
+        <tr>
+            <td>{{$item.ID}}</td>
+            <td>{{str $item.NickName}}</td>
+            <td><a href="/riders/{{$item.ID}}">{{$item.FirstName}} {{$item.LastName}}</a></td>
+            <td>{{str $item.Nationality}}</td>
+            <td>{{date $item.BirthDate}}</td>
+            <td>
+                {{if not (eq $item.TeamID nil) }}
+                <a href="/teams/{{$item.TeamID}}">
+                    <button>{{str $item.Team}}</button>
+                </a>
+                {{else}}-
+                {{end}}
+            </td>
+        </tr>
+        {{end}}
+
+    </tbody>
+</table>
+{{end}}
+{{end}}

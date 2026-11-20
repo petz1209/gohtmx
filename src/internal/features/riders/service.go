@@ -1,19 +1,24 @@
 package riders
 
-import (
-	"bikes/internal/features/riders/domain"
-	"bikes/internal/features/riders/repository"
-	"context"
-)
+import "context"
 
-type Service struct {
-	repo *repository.Repo
+type service struct {
+	repo *repo
 }
 
-func NewService(repo *repository.Repo) *Service {
-	return &Service{repo: repo}
+func newService(repo *repo) *service {
+	return &service{repo: repo}
 }
 
-func (s *Service) GetRiders(ctx context.Context) ([]domain.Rider, error) {
-	return s.repo.GetRiders(ctx)
+func (s *service) GetAllRiders(ctx context.Context) ([]Rider, error) {
+
+	riders, err := s.repo.GetAllRiders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return riders, nil
+}
+
+func (s *service) GetRiderById(ctx context.Context, id int) (*Rider, error) {
+	return s.repo.GetRiderDetails(ctx, id)
 }

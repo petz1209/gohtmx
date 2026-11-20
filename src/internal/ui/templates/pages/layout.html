@@ -1,13 +1,17 @@
-
-{{define "layout"}}
+{{define "layout"}}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>{{.Title}}</title>
+
+    <link rel="stylesheet" href="/static/css/app.css">
+
+    <!-- optional: feature specific css/js (use the asset func for the feature's static files) -->
+    {{block "head" .}}{{end}}
 </head>
 <body>
     {{template "content" .}}
 </body>
 </html>
-{{end }}
+{{end}}
