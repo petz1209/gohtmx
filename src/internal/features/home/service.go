@@ -3,6 +3,6 @@ package home
 type service struct {
 }
 
-func NewService() *service {
+func newService() *service {
 	return &service{}
 }

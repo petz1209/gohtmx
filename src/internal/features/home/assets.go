@@ -2,11 +2,9 @@ package home
 
 import "embed"
 
-//go:embed templates/**/*.html
-var htmlFiles embed.FS
+//go:embed templates static
+var files embed.FS
 
-//go:embed templates/**/*js
-var jsFiles embed.FS
-
-//go:embed templates/**/*.css
-var cssFiles embed.FS
+// assets.go macht nur die referenzen auf die emedded Filesystems.
+// in diesem fall wird sowohl templates als auch static embedded.
+// das is notwendig um das feature sauber einzubinden.

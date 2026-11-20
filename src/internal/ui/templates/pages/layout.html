@@ -1,5 +1,4 @@
-
-{{define "layout"}}
+{{define "layout"}}<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -8,16 +7,11 @@
 
     <link rel="stylesheet" href="/static/css/app.css">
 
-     {{block "head" .}}{{end}}
-
-     <!--with custom-assets you can register custom css and js files for your given usecase.-->
-     {{block "custom-assets" .}}{{end}}
+    <!-- optional: feature specific css/js (use the asset func for the feature's static files) -->
+    {{block "head" .}}{{end}}
 </head>
 <body>
-        <!--here we add the actuall content-->
-        {{template "content" .}}
-
-    
+    {{template "content" .}}
 </body>
 </html>
-{{end }}
+{{end}}

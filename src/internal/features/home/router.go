@@ -2,52 +2,34 @@ package home
 
 import (
 	"bikes/internal/ui"
-	"embed"
-	"io/fs"
+	"database/sql"
 	"net/http"
 )
 
-// instanciate a new router for the Home Feature
-func NewHomeRouter(mux *http.ServeMux, globTemplate embed.FS, reg *ui.StaticRegistry) error {
+// der router bindet das feature in unsere webapp ein.
+// baut das gesamte feature zusammen und verknüpft dann die einzelnen requests
+// mit spezifischen handlern.
 
-	// lets setup the renderer.
-	if err := RegisterAssets(reg); err != nil {
-		return err
-	}
+// Register wires the home feature into the app.
+func Register(mux *http.ServeMux, app *ui.App, db *sql.DB) error {
 
-	renderer, err := ui.NewRenderer("home", globTemplate, htmlFiles)
+	view, err := app.NewFeature("home", "Home", files)
 	if err != nil {
 		return err
 	}
-	// after the renderer we setup the service
-	srv := NewService()
 
-	h := NewHandler(renderer, srv)
-	// then we set up the handler.
+	// hier registrieren wir defakto den renderer
+	homePage, err := view.Page("index")
+	if err != nil {
+		return err
+	}
 
-	// finally we register the routes
+	h := newHandler(homePage, newService())
 
+	// hier registrieren wir die feature custom static files (also alles was im static ordner liegt)
+	// in index.html werden diese dann im head referenziert via asset.
+	// das ist optional, falls das feature eigene js und css hat die dazu geladen werden sollen.
+	mux.Handle("GET "+view.StaticPrefix(), view.StaticHandler())
 	mux.HandleFunc("GET /{$}", h.HomePage)
-
-	return nil
-
-}
-
-// register assets that you want in the system
-func RegisterAssets(reg *ui.StaticRegistry) error {
-	// Pfad auf den scripts-Ordner verkürzen, damit "home.js" im Root liegt
-	sub, err := fs.Sub(jsFiles, "templates/scripts")
-	if err != nil {
-		return err
-	}
-
-	// Macht die Datei unter /static/js/home.js erreichbar
-	reg.RegisterJS("home.js", sub)
-
-	sub, err = fs.Sub(cssFiles, "templates/css")
-	if err != nil {
-		return err
-	}
-	reg.RegisterJS("home.css", sub)
 	return nil
 }

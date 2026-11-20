@@ -7,6 +7,300 @@ I have a number of go services and systems, so I would say I am fairly familiar 
 Today this changes. I am creating this project mostly to track my own progress with htmx and it's go integration.
 
 
+# Framework-Dokumentation
+
+Dieser Abschnitt beschreibt, wie die Web-UI aktuell aufgebaut ist und wie die Teile
+zusammenkommen. Zielgruppe: Entwickler und KI-Agenten, die ein Feature hinzufügen oder
+das Framework verstehen wollen.
+
+Ziel des Frameworks: **Ein neues Feature (eine neue Seite) hinzuzufügen soll einfach sein,
+ohne das Wiring im Hintergrund verstehen zu müssen.** Gleichzeitig soll alles, was ein
+Feature ins System einhängt, im Feature selbst sichtbar sein.
+
+Stack: Go (nur Standardbibliothek: `net/http`, `html/template`, `embed`), htmx, SQLite.
+
+## Überblick
+
+```
+main.go
+  ├─ ui.NewApp()                       globale Templates (Layout, Partials, Components)
+  ├─ mux.Handle(ui.StaticPrefix, ...)  globale Static Files unter /static/
+  └─ home.Register(mux, app)           pro Feature eine Zeile
+        │
+        ├─ app.NewFeature("home", ...) Template-Sets pro Seite + Static-Handler
+        ├─ view.Page("home")           Seite beim Start holen
+        ├─ mux.Handle(/assets/home/)   Feature-Static mounten
+        └─ mux.HandleFunc(route, h)    Routen → Handler → service
+                                              │
+                                              └─ page.Render(w, r, ui.PageData{...})
+```
+
+Die Verantwortung ist so verteilt:
+
+| Teil | Zuständig für | Nicht zuständig für |
+|---|---|---|
+| **Router** (heute `http.ServeMux`, später restify/`web.API`) | Routing, Middleware, Server | Templates |
+| **`internal/ui`** | Templates parsen, Seiten rendern, Static-Handler liefern | Routing (besitzt **keinen** Mux) |
+| **Feature** (`internal/features/<name>`) | eigene Seiten, Partials, Static Files, Routen, Handler, Service | globale Dinge |
+
+## Verzeichnisstruktur
+
+```
+src/
+  cmd/app/main.go                 Einstiegspunkt: DB, ui.NewApp, Features registrieren, Server
+  internal/
+    database/                     SQLite-Zugriff
+    ui/                           das Framework
+      assets.go                   //go:embed static templates
+      app.go                      App, NewApp, StaticHandler, StaticPrefix
+      feature.go                  Feature, NewFeature, Page(), StaticHandler()
+      page.go                     Page, Render
+      model.go                    PageData (Template-Daten)
+      doc.go                      Kurzfassung des Vertrags (go doc)
+      static/                     globale CSS/JS (app.css, htmx.min.js, ...) → /static/
+      templates/
+        pages/layout.html         das globale Layout ("layout")
+        pages/error.html          Fehlerseite ("error", noch nicht verdrahtet)
+        partials/navbar.html      globale Partials ("navbar")
+        components/link.html      globale Components ("component.link")
+    features/
+      home/                       Beispiel-Feature, dient als Kopiervorlage
+        assets.go                 //go:embed templates static
+        router.go                 Register(): Feature bauen, Seiten holen, Routen mounten
+        handler.go                HTTP-Handler
+        service.go                Geschäftslogik
+        templates/
+          pages/home.html         eine Datei = eine Seite
+        static/home.css, home.js  → /assets/home/...
+```
+
+## Das `ui`-Package
+
+### API
+
+```go
+// global
+const ui.StaticPrefix = "/static/"
+func  ui.StaticHandler() http.Handler                 // globale Static Files
+
+func  ui.NewApp() (*ui.App, error)                    // parst die globalen Templates
+
+// pro Feature
+func (a *App)     NewFeature(name, defaultTitle string, fsys fs.FS) (*Feature, error)
+func (f *Feature) Page(name string) (*Page, error)    // templates/pages/<name>.html
+func (f *Feature) StaticPrefix() string               // "/assets/<name>/"
+func (f *Feature) StaticHandler() http.Handler        // serviert <feature>/static/
+
+// pro Seite
+func (p *Page) Render(w http.ResponseWriter, r *http.Request, data ui.PageData) error
+
+type PageData struct {
+    Title  string   // leer → defaultTitle des Features
+    Header Header
+    Footer Footer
+    Data   any      // feature-spezifische Daten
+}
+```
+
+### Template-Sets: eines pro Seite
+
+Go-Templates haben kein `extends` wie Jinja. Alle `{{define}}`s eines Sets teilen sich
+einen Namensraum. Würden alle Seiten in einem Set liegen, würden sich ihre
+`{{define "content"}}` gegenseitig überschreiben.
+
+Deshalb bekommt **jede Seite ein eigenes Set**:
+
+```
+Set einer Seite = globale Templates (ui/templates/**)
+                + Feature-Templates außerhalb von pages/ (Partials des Features)
+                + genau eine Datei aus templates/pages/
+```
+
+Technisch: Die globalen Templates werden einmal geparst. Pro Feature wird das Set geklont
+(`Clone()`) und um die Feature-Partials ergänzt. Pro Seite wird das noch einmal geklont und
+um die Seitendatei ergänzt. Alles passiert beim Start.
+
+### Template-Vertrag
+
+Das globale `layout` ruft diese Blöcke auf:
+
+| Block | Pflicht | Inhalt |
+|---|---|---|
+| `"content"` | ja | der Seiteninhalt (im `<body>`) |
+| `"head"` | nein | zusätzliche Tags im `<head>` (CSS, JS, Meta) |
+
+Die Template-Daten sind immer ein `ui.PageData`. Eigene Daten kommen in `PageData.Data`.
+
+Verfügbare Template-Funktion:
+
+| Funktion | Ergebnis |
+|---|---|
+| `{{asset "home.css"}}` | `/assets/<feature>/home.css` |
+
+Beispiel (`features/home/templates/pages/home.html`):
+
+```html
+{{define "head"}}
+<link rel="stylesheet" href="{{asset "home.css"}}">
+<script src="{{asset "home.js"}}" defer></script>
+{{end}}
+
+{{define "content"}}
+<header>{{template "navbar" .}}</header>
+<main>
+    <h2>Hello World</h2>
+</main>
+{{end}}
+```
+
+Alle Templates werden mit `html/template` geparst. Die Ausgabe wird also automatisch
+kontextabhängig escaped (HTML, Attribute, URLs, JS). Kein `text/template` verwenden.
+
+### Static Files
+
+| URL | Quelle | gemountet von |
+|---|---|---|
+| `/static/...` | `internal/ui/static/` | `main.go` |
+| `/assets/<feature>/...` | `internal/features/<feature>/static/` | `router.go` des Features |
+
+Jedes Feature hat seinen eigenen Präfix. Zwei Features können also gleichnamige Dateien
+haben, ohne zu kollidieren. URLs zu Feature-Dateien immer mit `{{asset ...}}` erzeugen,
+nie den Präfix von Hand schreiben.
+
+### Fehlerverhalten
+
+| Fehler | Wann er auffällt |
+|---|---|
+| Syntaxfehler in einem Template | beim Start (`NewApp` / `NewFeature`) |
+| Seite ohne `{{define "content"}}` | beim Start (`NewFeature`) |
+| Seitenname falsch geschrieben | beim Start (`Page(...)` im Router) |
+| Fehler bei der Ausführung (z.B. falsches Feld in `.Data`) | beim Request: `Render` gibt einen `error` zurück |
+
+`Render` puffert die Ausgabe. Bei einem Fehler wurde noch **nichts** geschrieben, und der
+Handler entscheidet, wie er antwortet. Interne Fehlermeldungen gehen ins Log, nicht in den
+Browser.
+
+## Ein neues Feature hinzufügen
+
+Am einfachsten `features/home` kopieren und umbenennen. Schritt für Schritt:
+
+**1. `assets.go`** – ein einziges Embed für alles:
+
+```go
+package riders
+
+import "embed"
+
+//go:embed templates static
+var files embed.FS
+```
+
+(Gibt es kein `static/`, nur `//go:embed templates` schreiben. Ein Embed auf einen
+fehlenden Ordner ist ein Compile-Fehler.)
+
+**2. Templates** – eine Datei pro Seite in `templates/pages/`, jede definiert `"content"`.
+Partials, die mehrere Seiten des Features nutzen, kommen in einen anderen Ordner unter
+`templates/` (z.B. `templates/partials/`).
+
+**3. `router.go`** – Feature bauen, Seiten holen, mounten:
+
+```go
+func Register(mux *http.ServeMux, app *ui.App) error {
+    view, err := app.NewFeature("riders", "Fahrer", files)
+    if err != nil {
+        return err
+    }
+    listPage, err := view.Page("list")
+    if err != nil {
+        return err
+    }
+
+    h := newHandler(listPage, newService())
+
+    mux.Handle("GET "+view.StaticPrefix(), view.StaticHandler())
+    mux.HandleFunc("GET /riders", h.List)
+    return nil
+}
+```
+
+Abhängigkeiten (DB, Konfiguration, ...) werden als Parameter an `Register` übergeben,
+nicht über globale Variablen.
+
+**4. `handler.go`** – rendern:
+
+```go
+func (h *handler) List(w http.ResponseWriter, r *http.Request) {
+    data := ui.PageData{Data: riders}
+    if err := h.listPage.Render(w, r, data); err != nil {
+        slog.ErrorContext(r.Context(), "riders list", "err", err)
+        http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+    }
+}
+```
+
+**5. `main.go`** – eine Zeile:
+
+```go
+if err := riders.Register(mux, app); err != nil {
+    log.Fatal(err)
+}
+```
+
+## Konventionen und Regeln
+
+- **`ui` macht kein Routing.** Es liefert `http.Handler` und rendert. Mounten tut immer der
+  Aufrufer. So bleibt `ui` unabhängig vom Router (Std-Mux heute, restify später).
+- **Explizites Wiring im Feature.** Alles, was ein Feature ins System einhängt (Routen,
+  Static Files, Abhängigkeiten), steht in seinem `router.go`. Keine `init()`-Magie, kein
+  globaler Zustand.
+- **Fehler beim Start statt beim Request.** Seiten werden im Router per `Page(...)` geholt,
+  nicht im Handler über einen String-Namen.
+- **Ein Feature ist in sich geschlossen.** Templates, Static Files und Logik liegen im
+  Feature-Ordner. Was mehrere Features brauchen, gehört nach `ui/templates` (global) bzw.
+  später in eigene Components.
+- **Template-Namen:** Seiten definieren `content` und optional `head`. Eigene Partials
+  bekommen sprechende, eindeutige Namen (z.B. `rider-list`, `rider-detail-panel`).
+- **Keine `**` in `//go:embed`-Mustern.** `**` matcht nur **eine** Verzeichnisebene. Ganze
+  Ordner einbetten (`//go:embed templates static`), die sind automatisch rekursiv.
+- **Konstruktoren unexportiert**, wenn sie unexportierte Typen liefern (`newHandler`,
+  `newService`). Exportiert ist pro Feature nur `Register`.
+
+## Bewusste Entscheidungen
+
+| Entscheidung | Warum |
+|---|---|
+| Template-Set pro Seite | jede Seite darf `content`/`head` definieren, ohne Dispatcher (`if eq .ContentTemplate ...`) |
+| `ui` ohne Mux | dasselbe `ui` funktioniert mit `http.ServeMux` und mit restify (Middleware, Logging bleiben beim Router) |
+| `Render` gibt `error` zurück | passt direkt zu `web.HandlerFunc` von restify (`return page.Render(...)`) |
+| Static-Präfix pro Feature | keine Namenskollisionen zwischen Features, echte Pfade statt Lookup nach Dateiname |
+| `html/template` | automatisches Escaping, Schutz vor XSS |
+| explizites Wiring | alles im Feature sichtbar, weniger Seiteneffekte, gut für parallele Arbeit mehrerer Entwickler |
+
+## Einordnung: vergleichbar mit Flask
+
+| Flask | hier |
+|---|---|
+| `Flask(...)` + Routing | `http.ServeMux` (später restify / `web.API`) |
+| Blueprint mit `template_folder` / `static_folder` | Feature mit `templates/` / `static/` |
+| `url_for("home.static", filename=...)` | `{{asset "..."}}` |
+| `render_template(...)` | `page.Render(w, r, data)` |
+| `{% extends "layout.html" %}` | eigenes Template-Set pro Seite + globales `layout` |
+| `@login_required` / `before_request` | Middleware am (Sub-)Router |
+
+Unterschied zu Flask: keine globalen Kontext-Objekte (`request`, `g`, `current_app`). Alles
+wird explizit übergeben, und Template-Fehler fallen beim Start auf statt beim Aufruf.
+
+## Noch nicht umgesetzt
+
+- **htmx-Fragmente:** `Render` rendert immer die ganze Seite (`layout`). Rendering von
+  Fragmenten (z.B. nur ein Panel bei `HX-Request`) kommt, sobald htmx im Projekt genutzt wird.
+- **Fehlerseite:** `error.html` existiert, ist aber noch nicht verdrahtet. Handler antworten
+  bei Render-Fehlern mit einem generischen 500.
+- **Middleware / Auth:** gibt es im Toy-Projekt noch nicht. Im Zielsystem (restify) gilt:
+  Auth pro Router-**Gruppe**, nicht pro Route.
+- **Integration in restify / fgohtmxui:** siehe [`todo.md`](todo.md).
+
+
 # 02 – Fahrer-Details nachladen
 
 **Branch:** `t02/fahrer-details` → `t02/complete`

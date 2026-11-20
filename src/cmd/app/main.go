@@ -8,6 +8,7 @@ import (
 
 	"bikes/internal/database"
 	"bikes/internal/features/home"
+	"bikes/internal/features/riders"
 	"bikes/internal/ui"
 )
 
@@ -22,22 +23,26 @@ func main() {
 	defer db.Close()
 	log.Printf("database ready: %s", *dbPath)
 
-	mux := http.NewServeMux()
-
-	scriptRegistry := ui.NewRegistry(ui.StaticFS)
-	if err := home.NewHomeRouter(mux, ui.UiFS, scriptRegistry); err != nil {
-
+	app, err := ui.NewApp()
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	fileServer := scriptRegistry.Handler()
+	mux := http.NewServeMux()
+	mux.Handle("GET "+ui.StaticPrefix, ui.StaticHandler())
 
-	//mux.Handle("/static/", http.FileServer(http.FS(ui.StaticFS)))
-	mux.Handle("/static/", fileServer)
+	// features
+	if err := home.Register(mux, app, db); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := riders.Register(mux, app, db); err != nil {
+		log.Fatal(err)
+	}
 
 	svr := &http.Server{
 		Addr:    "localhost:8080",
-		Handler: mux,
+		Handler: app.Recover(mux),
 	}
 
 	fmt.Println("Listening on http://localhost:8080")
