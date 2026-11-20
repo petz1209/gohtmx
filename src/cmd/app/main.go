@@ -24,7 +24,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	scriptRegistry := ui.NewRegistry(ui.UiFS)
+	scriptRegistry := ui.NewRegistry(ui.StaticFS)
 	if err := home.NewHomeRouter(mux, ui.UiFS, scriptRegistry); err != nil {
 
 		log.Fatal(err)

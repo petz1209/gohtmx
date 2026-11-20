@@ -10,13 +10,14 @@ import (
 )
 
 type Renderer struct {
-	assets *template.Template
+	defaultTitle string
+	assets       *template.Template
 }
 
 // NewRenderer
 // creates a new renderer for a given page or usecase.
 // I think that should be fine to be honest.
-func NewRenderer(globTemplates embed.FS, locTemplates embed.FS, patterns ...string) (*Renderer, error) {
+func NewRenderer(defaultTitle string, globTemplates embed.FS, locTemplates embed.FS, patterns ...string) (*Renderer, error) {
 	if patterns == nil {
 		patterns = []string{"templates/**/*.html"}
 	}
@@ -30,7 +31,7 @@ func NewRenderer(globTemplates embed.FS, locTemplates embed.FS, patterns ...stri
 		return nil, fmt.Errorf("failed to parse localTeamplates with err: %w", err)
 	}
 
-	return &Renderer{assets: t}, nil
+	return &Renderer{defaultTitle: defaultTitle, assets: t}, nil
 }
 
 func (h *Renderer) Render(ctx context.Context, p Page,
@@ -38,6 +39,9 @@ func (h *Renderer) Render(ctx context.Context, p Page,
 
 ) {
 
+	if p.Title == "" {
+		p.Title = h.defaultTitle
+	}
 	var buf bytes.Buffer
 
 	if err := h.assets.ExecuteTemplate(&buf, "layout", p); err != nil {

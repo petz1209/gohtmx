@@ -25,3 +25,45 @@ aktuell verwenden wir unserrn Renderer noch nicht.
 
 
 
+## Setup entwicklung:
+
+ich habe jetzt mal das setup fertig gemacht.
+hier der flow.
+
+als erstes habe ich alle ui logiken und global assets in ein package mit dem namen ui gegeben.
+hier habe ich jetzt 2 emebddings.
+
+- static:  
+einmal den static folder. der static folder hält globale css und js files und dinge wie logos usw.
+
+- templates:
+templates hält .html files, die global verwendet werden. ein beispiel ist layout.html
+
+beide werden dann via embedding eingebunden.
+
+
+dann haben ich renderr.go
+der renderer.go wir von jedem feature instanziert und packaged die globalen templates gemeinsam mit den feature spezifischen html templates.
+damit habe ich hier keine coalision gefahr mehr.
+
+dann habe ich das registry.go  
+registry go erlaubt es mir im feature auch eigene js und css datein zu haben, die dann registriert werden.
+registry.Handle() ist ausserdem eine factory mir eine funktionierende handlefunc packaged die ich dann später einbinden kann.
+
+Entscheidungen:
+
+ - Renderer. jedes feature instanziert eigenen render.  
+ gibt mir mir flexibilität
+
+
+
+
+
+
+
+
+
+
+
+
+

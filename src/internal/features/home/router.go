@@ -7,6 +7,7 @@ import (
 	"net/http"
 )
 
+// instanciate a new router for the Home Feature
 func NewHomeRouter(mux *http.ServeMux, globTemplate embed.FS, reg *ui.StaticRegistry) error {
 
 	// lets setup the renderer.
@@ -14,7 +15,7 @@ func NewHomeRouter(mux *http.ServeMux, globTemplate embed.FS, reg *ui.StaticRegi
 		return err
 	}
 
-	renderer, err := ui.NewRenderer(globTemplate, htmlFiles)
+	renderer, err := ui.NewRenderer("home", globTemplate, htmlFiles)
 	if err != nil {
 		return err
 	}
@@ -32,6 +33,7 @@ func NewHomeRouter(mux *http.ServeMux, globTemplate embed.FS, reg *ui.StaticRegi
 
 }
 
+// register assets that you want in the system
 func RegisterAssets(reg *ui.StaticRegistry) error {
 	// Pfad auf den scripts-Ordner verkürzen, damit "home.js" im Root liegt
 	sub, err := fs.Sub(jsFiles, "templates/scripts")
@@ -41,5 +43,11 @@ func RegisterAssets(reg *ui.StaticRegistry) error {
 
 	// Macht die Datei unter /static/js/home.js erreichbar
 	reg.RegisterJS("home.js", sub)
+
+	sub, err = fs.Sub(cssFiles, "templates/css")
+	if err != nil {
+		return err
+	}
+	reg.RegisterJS("home.css", sub)
 	return nil
 }

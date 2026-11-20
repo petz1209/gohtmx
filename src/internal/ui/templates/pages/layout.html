@@ -5,24 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}}</title>
+
+    <link rel="stylesheet" href="/static/css/app.css">
+
      {{block "head" .}}{{end}}
 
-     <!--Here we register custom scripts that are relevant for the given page.
-         These guys should somehow becomme part of the static stuff.
-         No clue how I can achieve this.
-     -->
-     {{block "scripts" .}}{{end}}
+     <!--with custom-assets you can register custom css and js files for your given usecase.-->
+     {{block "custom-assets" .}}{{end}}
 </head>
 <body>
-
-    <!--add a navbar. that navbar can get some information that is relevant for it.-->
-    <header>{{template "navbar" .}}</header>
-    <main>
         <!--here we add the actuall content-->
         {{template "content" .}}
-    </main>
 
-    <!--if the page needs some custom javascript-->
     
 </body>
 </html>
